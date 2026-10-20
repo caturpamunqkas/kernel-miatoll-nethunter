@@ -25,16 +25,24 @@ jobs:
           sudo apt-get install -y -qq bc bison flex libssl-dev libelf-dev patch \
             gcc-aarch64-linux-gnu libc6-dev-arm64-cross zip unzip rsync cpio zstd lz4
 
-      # Cached tree already carries the patch marker, so apply-patches.sh is a no-op
-      # on a hit. Key includes the patch set, so a changed patch means a fresh clone.
-      - name: Cache kernel tree + clang
+      # Cache the PRISTINE tree and the toolchain, not the patched one: a cached
+      # patched tree would make apply-patches.sh re-apply on top of itself.
+      - name: Cache pristine kernel tree + clang
         uses: actions/cache@v4
         with:
           path: |
             src/kernel
             src/clang
-          key: ksrc-${{ hashFiles('patches/4.14/*.patch') }}
+          key: ksrc-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: ksrc-
+
+      - name: Restore tree to pristine
+        run: |
+          if [ -d src/kernel/.git ]; then
+            git -C src/kernel checkout -- . || true
+            git -C src/kernel clean -fdq || true
+            rm -f src/kernel/.nethunter-patches-applied
+          fi
 
       - name: Build kernel
         run: ./scripts/build.sh --jobs "$(nproc)"

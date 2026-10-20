@@ -71,7 +71,7 @@ for sym in \
   BT_HCIBTUSB BT_HCIBTUSB_BCM BT_HCIBTUSB_RTL BT_HCIUART BT_HCIUART_H4 \
   BT_HCIUART_BCM BT_HCIUART_QCA BT_HCIUART_3WIRE BT_HCIVHCI BT_HCIBCM203X \
   BT_HCIBPA10X BT_HCIBFUSB BT_RFCOMM BT_RFCOMM_TTY BT_BNEP BT_HIDP BT_LE \
-  DEBUG_FS BT_DEBUGFS \
+  SERIAL_DEV_BUS DEBUG_FS BT_DEBUGFS \
   CFG80211 CFG80211_WEXT MAC80211 MAC80211_MESH ATH9K_HTC CARL9170 ATH6KL ATH6KL_USB \
   RT2X00 RT2500USB RT73USB RT2800USB RT2800USB_UNKNOWN RTL8187 RTL_CARDS RTL8192CU \
   RTL8XXXU RTL8XXXU_UNTESTED 88XXAU RTW88_CORE RTW88_USB RTW88_8812AU RTW88_8821AU \
@@ -79,7 +79,7 @@ for sym in \
   MEDIA_SDR_SUPPORT MEDIA_DIGITAL_TV_SUPPORT USB_AIRSPY USB_HACKRF USB_MSI2500 \
   MEDIA_TUNER_MSI001 DVB_USB_V2 DVB_USB_RTL28XXU DVB_RTL2832_SDR \
   CAN CAN_RAW CAN_BCM CAN_GW CAN_VCAN CAN_SLCAN CAN_GS_USB CAN_PEAK_USB CAN_8DEV_USB \
-  NET_SCH_CAN \
+  NET_EMATCH NET_EMATCH_CANID \
   NFS_FS NFS_V3 NFS_V4 NFSD NFSD_V3 NFSD_V4 \
   SYSVIPC; do
   grep -q "^CONFIG_$sym=y" "$OUT/.config" || { echo "MISSING: $sym" >&2; missing=1; }
@@ -87,4 +87,12 @@ done
 [ "$missing" = 0 ] || { echo "config merge incomplete, aborting" >&2; exit 1; }
 
 mk -j"$JOBS" Image.gz
-echo "OK: $OUT/arch/arm64/boot/Image.gz"
+
+# A -dirty kernel release breaks vermagic against every vendor .ko in
+# /vendor/lib/modules. Fail loudly instead of shipping an unbootable boot.img.
+REL=$(make -s -C "$SRC" O="$OUT" kernelrelease 2>/dev/null)
+case "$REL" in
+  *-dirty) echo "kernelrelease is $REL — dirty tree breaks vermagic, aborting" >&2; exit 1 ;;
+esac
+
+echo "OK: $OUT/arch/arm64/boot/Image.gz ($REL)"

@@ -53,6 +53,8 @@ CONFIG_BT_LE=y
 # ---- Celah dari docs NetHunter (General / Network / USB 4.x) ----
 CONFIG_SYSVIPC=y
 CONFIG_USB_RTL8150=y
+# BT_HCIUART_BCM / _3WIRE depend on BT_HCIUART_SERDEV, which depends on this.
+CONFIG_SERIAL_DEV_BUS=y
 CONFIG_BT_HCIBCM203X=y
 CONFIG_BT_HCIBPA10X=y
 CONFIG_BT_HCIBFUSB=y

@@ -14,7 +14,33 @@ MARK=$SRC/.nethunter-patches-applied
 [ -d "$SRC" ] || { echo "no kernel tree at $SRC" >&2; exit 1; }
 
 if [ "${1:-}" = "--force" ]; then rm -f "$MARK"; fi
-if [ -f "$MARK" ]; then echo "patches already applied ($MARK)"; exit 0; fi
+
+# Patching in place dirties the tree, and CONFIG_LOCALVERSION_AUTO=y turns that
+# into a "-dirty" suffix: 4.14.336-g0c870bf38789 becomes ...-dirty, the vermagic
+# no longer matches the vendor .ko files in /vendor/lib/modules, and the device
+# may not boot. Commit the result so setlocalversion sees a clean tree.
+commit_patched_tree() {
+  [ -d "$SRC/.git" ] || {
+    echo "note: $SRC is not a git tree; setlocalversion adds no -dirty" >&2
+    return 0
+  }
+  # -uno would hide the new driver directories; check everything.
+  [ -n "$(cd "$SRC" && git status --porcelain)" ] || return 0
+  ( cd "$SRC" && git add -A -f . && \
+    git -c user.name="nethunter-build" -c user.email="nethunter@localhost" \
+        commit -q -m "NetHunter patch set applied" ) || {
+    echo "WARNING: could not commit patched tree; localversion may be -dirty" >&2
+    return 0
+  }
+  [ -z "$(cd "$SRC" && git status --porcelain)" ] || \
+    echo "WARNING: tree still dirty after commit; kernel release may end in -dirty" >&2
+}
+
+if [ -f "$MARK" ]; then
+  echo "patches already applied ($MARK)"
+  commit_patched_tree
+  exit 0
+fi
 
 # fuzz=3 is required: rtl8188eus/rtw88/qcacld hunks carry stale offsets against
 # lineage-21. Artifact checks below are what actually prove the apply worked.
@@ -55,6 +81,8 @@ need_grep net/mac80211/tx.c 'IEEE80211_TX_CTL_INJECTED'
 need_grep include/linux/build_bug.h 'define static_assert(expr)'
 need_grep drivers/net/wireless/realtek/rtw88/sec.c 'rtw88_sec_write_cam'
 need_grep drivers/net/wireless/realtek/rtw88/regd.c 'rtw88_regd_init'
+
+commit_patched_tree
 
 touch "$MARK"
 echo "OK: patch set applied and verified"
