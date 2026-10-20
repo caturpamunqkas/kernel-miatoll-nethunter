@@ -45,7 +45,7 @@ jobs:
           fi
 
       - name: Build kernel
-        run: ./scripts/build.sh --jobs "$(nproc)"
+        run: KBUILD_NOCMDDEP=1 ./scripts/build.sh --jobs "$(nproc)"
 
       - name: Package AnyKernel3
         run: |
