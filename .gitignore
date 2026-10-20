@@ -2,6 +2,10 @@ src/
 out/
 *.zip
 *.tar.gz
+boot/
 
 # Kali patch set provenance
 patches/4.14/*.patch.sha256
+__pycache__/
+*.pyc
+tools/kp/temp.gz

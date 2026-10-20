@@ -176,13 +176,20 @@ kernel-miatoll-nethunter/
 ├── scripts/
 │   ├── build.sh                  # clone, apply patch, merge fragment, olddefconfig, gate, build
 │   ├── apply-patches.sh          # urutan patch + verifikasi artefak + commit tree
-│   └── check-symbols.sh          # cek tiap CONFIG_* punya Kconfig entry
+│   ├── check-symbols.sh          # cek tiap CONFIG_* punya Kconfig entry
+│   └── make-bootimg.sh           # Image.gz + stock boot.img -> boot.img utuh (+ inject APatch)
+├── tools/
+│   ├── kp/                       # kptools-linux + kpimg-android (KernelPatch 0.13.9)
+│   └── mkbootimg/                # unpack_bootimg.py + mkbootimg.py (AOSP)
+├── boot/                         # hasil rakit boot.img (tidak di-commit)
 ├── docs/superpowers/             # rancangan + rencana implementasi
 ├── .github/workflows/build.yml   # CI: build + zip AK3 + upload artifact
 └── System.map                    # simbol kernel hasil build terakhir
 ```
 
-Hasil build tidak di-commit: `src/` (kernel + clang) dan `out/` masuk `.gitignore`.
+Hasil build tidak di-commit: `src/` (kernel + clang), `out/`, `boot/`, dan `*.zip`
+masuk `.gitignore`. `tools/kp/kptools-linux` (724 KB) dan `tools/mkbootimg/` (156 KB)
+di-commit supaya `make-bootimg.sh` jalan tanpa download tambahan.
 
 ---
 
@@ -329,6 +336,33 @@ fastboot flash boot boot-backup.img
 fastboot flash boot boot.img        # dari zip ROM Lineage 21
 fastboot reboot
 ```
+
+### 7b. boot.img utuh (untuk APatch / fastboot)
+
+`build.sh` menghasilkan `Image.gz` — kernel mentah, bukan boot image. AnyKernel3 memakainya
+di dalam recovery. **APatch butuh file `boot.img` utuh** untuk dipatch offline, jadi
+`Image.gz` saja tidak cukup. `scripts/make-bootimg.sh` merakitnya:
+
+```bash
+# 1. ambil boot.img asli dari device yang sedang jalan (wajib ROM yang sama persis)
+adb shell su -c 'dd if=/dev/block/bootdevice/by-name/boot of=/sdcard/boot-stock.img'
+adb pull /sdcard/boot-stock.img
+
+# 2. rakit boot.img berisi kernel kita (ramdisk + dtb + cmdline dari stock)
+./scripts/make-bootimg.sh \
+  --stock boot-stock.img \
+  --image out/arch/arm64/boot/Image.gz \
+  --out boot/boot-nethunter.img
+```
+
+Script mem-parse header boot image stock (header version, page size, load address, tags,
+dtb offset, os version, patch level, cmdline), mengganti **hanya kernel**, lalu
+**memverifikasi ramdisk dan dtb identik byte-per-byte** dengan stock. Kalau beda, script abort.
+
+Hasil: `boot/boot-nethunter.img` — flash lewat `fastboot flash boot boot-nethunter.img`.
+
+> `boot.img` dari zip ROM versi lain **jangan** dipakai. Ramdisk-nya beda rilis Android;
+> hasilnya kernel jalan tapi Android gagal boot. Ambil dari partisi device sendiri.
 
 ---
 
@@ -477,6 +511,68 @@ hcitool lescan
 ```
 `/sys/kernel/debug/bluetooth/` tersedia untuk inspeksi internal (LL, l2cap, ds, dll).
 
+### 9.5 APatch (root berbasis kernel)
+
+Kernel ini sudah memenuhi syarat APatch sejak awal build:
+
+```
+CONFIG_KALLSYMS=y
+CONFIG_KALLSYMS_ALL=y
+CONFIG_KALLSYMS_BASE_RELATIVE=y
+CONFIG_IKCONFIG=y / IKCONFIG_PROC=y   -> /proc/config.gz ada
+```
+
+Cek sendiri di device:
+```bash
+zcat /proc/config.gz | grep -w CONFIG_KALLSYMS
+```
+
+APatch hanya menerima **boot.img utuh**, bukan `Image.gz`. Dua cara:
+
+**A. Otomatis dari APatch Manager (paling mudah, di HP)**
+1. Ambil `boot-nethunter.img` hasil `scripts/make-bootimg.sh` (bagian 7b), kirim ke HP.
+2. Buka APatch Manager → tombol kanan atas → **Select a boot image to patch** → pilih file itu.
+3. Set **SuperKey** (8–63 karakter, huruf + angka, tanpa simbol; jangan yang lemah).
+4. **Start** → hasil `apatch_<version>_<random>.img` di `Download/`.
+5. Flash hasilnya.
+
+**B. Offline di laptop/CI (`scripts/make-bootimg.sh` sudah menyatu)**
+```bash
+./scripts/make-bootimg.sh \
+  --stock boot-stock.img \
+  --image out/arch/arm64/boot/Image.gz \
+  --out boot/boot-nethunter.img \
+  --skey 'SuperKeyKuat123'
+# hasil tambahan: boot/boot-nethunter-apatch.img
+```
+Atau lewat fd supaya SuperKey tidak muncul di `ps`/history:
+```bash
+printf '%s' 'SuperKeyKuat123' > /tmp/sk
+./scripts/make-bootimg.sh --stock boot-stock.img --image out/.../Image.gz \
+  --out boot/boot-nethunter.img --skey-fd 3 3</tmp/sk
+shred -u /tmp/sk
+```
+Script memakai `kptools-linux` + `kpimg-android` (KernelPatch 0.13.9, ada di `tools/kp/`),
+lalu **memverifikasi** `patched=true` pada kernel hasil ekstraksi. Kalau verifikasi gagal,
+script abort — tidak ada file yang diam-diam tidak terpacth.
+
+**Urutan yang benar (penting):**
+1. `scripts/make-bootimg.sh` → `boot-nethunter.img` (kernel kita + ramdisk stock)
+2. baru inject APatch ke boot image itu
+
+Jangan inject APatch ke `Image.gz` mentah, dan jangan inject ke `boot.img` ROM lalu
+menimpa kernelnya — urutan itu membuang patch KP.
+
+**Yang perlu diketahui:**
+- APatch menambah ukuran boot image (KP core + kallsyms lookup). Di joyeuse hasilnya
+  41 MB dari partisi 128 MB — masih lega.
+- `CONFIG_CFI_CLANG` mati di build `--lite`. Itu justru menguntungkan APatch: kptools
+  memperingatkan bahwa CFI mismatch pada memori KP bisa memicu reboot acak. Build LTO+CFI
+  (laptop/CI) tetap bisa dipakai, tapi kalau muncul reboot acak, build `--lite` adalah
+  kandidat pertama yang dicoba.
+- SuperKey tersimpan di dalam boot image. Jangan commit `boot-*.img` hasil patch ke repo
+  (sudah masuk `.gitignore` lewat `boot/`).
+
 ---
 
 ## 10. Troubleshooting
@@ -499,6 +595,10 @@ hcitool lescan
 | `error: expected ')'` di `rtw88/tx.c` | `static_assert()` tidak ada di kernel < 5.1 | patch `fix-rtw88-static-assert.patch` harus teraplikasi |
 | `No space left on device` saat build | `/tmp` tmpfs, atau runner CI tanpa bebas disk | build dengan `OUT` di disk nyata (`--out`); CI punya langkah `Free disk` |
 | `aireplay-ng --test` gagal walau monitor mode jalan | jalur TX tidak ter-inject: patch `add-wifi-injection` tidak masuk | cek `grep IEEE80211_TX_CTL_INJECTED net/mac80211/tx.c` di tree |
+| `kptools -l` bilang `kernel image magic error` | `-l`/`-d`/`-f` hanya menerima **kernel image**, bukan `boot.img` | ekstrak kernel dulu (`unpack_bootimg.py --boot_img ... --out dir`), lalu `kptools -l -i dir/kernel`. `make-bootimg.sh` sudah melakukannya |
+| APatch Manager menolak boot image | yang dipilih `Image.gz`/kernel mentah, bukan `boot.img` | pakai hasil `scripts/make-bootimg.sh`, bukan `out/arch/arm64/boot/Image.gz` |
+| Kernel boot tapi Android tidak mau boot setelah APatch | ramdisk dari ROM versi lain | pakai `boot.img` yang di-`dd` dari partisi device sendiri |
+| `warning: overload size of rest data, kptools may crash` | tail boot image penuh; kptools otomatis memperbesar image | normal, tidak fatal — image tumbuh ~1 MB dan masih di bawah ukuran partisi |
 
 ---
 
