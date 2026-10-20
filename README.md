@@ -9,14 +9,19 @@ Patch source kernel **dipakai** (`patches/4.14/`, 9 patch dari Kali kernel-build
 nol adapter WiFi USB bisa hidup, dan injection butuh patch mac80211. Detail:
 `patches/4.14/SOURCE.md`.
 
-Build terverifikasi: `Linux version 4.14.336-g0c870bf38789 #3 SMP PREEMPT`,
-clang 12.0.5 (r416183b) + LLD 12.0.5.
+Build terverifikasi lokal (clang r416183b + LLD 12.0.5, `--lite`, `-j6`):
 
-Build sekarang memperkenalkan dirinya sebagai NetHunter lewat `CONFIG_LOCALVERSION`:
+```
+Image.gz          19.876.860 byte
+uname             4.14.336-NetHunter-g92b436e25a30
+vermagic          4.14.336-NetHunter-g92b436e25a30 SMP preempt mod_unload modversions aarch64
+```
+
+Build memperkenalkan dirinya sebagai NetHunter lewat `CONFIG_LOCALVERSION`:
 
 ```
 $ uname -a
-Linux localhost 4.14.336-NetHunter-g92b436e25a30 #1 SMP PREEMPT ... aarch64
+Linux localhost 4.14.336-NetHunter-g92b436e25a30 #4 SMP PREEMPT ... aarch64
 ```
 
 Konsekuensi yang perlu diketahui: `CONFIG_LOCALVERSION` ikut masuk vermagic, jadi
@@ -167,11 +172,12 @@ kernel-miatoll-nethunter/
 │   ├── build-lite.fragment       # matikan LTO/CFI/DEBUG_INFO (host RAM kecil)
 │   ├── miatoll-nethunter.config  # .config final hasil build (referensi)
 │   └── anykernel.sh              # script AnyKernel3 (device check miatoll)
-├── patches/4.14/                 # patch set Kali + 2 perbaikan lokal, SOURCE.md, SHA256SUMS
+├── patches/4.14/                 # 9 patch Kali + 2 perbaikan lokal, SOURCE.md, SHA256SUMS
 ├── scripts/
 │   ├── build.sh                  # clone, apply patch, merge fragment, olddefconfig, gate, build
-│   ├── apply-patches.sh          # urutan patch + verifikasi artefak
+│   ├── apply-patches.sh          # urutan patch + verifikasi artefak + commit tree
 │   └── check-symbols.sh          # cek tiap CONFIG_* punya Kconfig entry
+├── docs/superpowers/             # rancangan + rencana implementasi
 ├── .github/workflows/build.yml   # CI: build + zip AK3 + upload artifact
 └── System.map                    # simbol kernel hasil build terakhir
 ```
@@ -192,20 +198,32 @@ SRC=src/kernel ./scripts/apply-patches.sh       # apply + verifikasi artefak
 
 ### 5.1 Cepat (host RAM cukup, ≥8 GB)
 ```bash
-git clone <repo-ini> kernel-miatoll-nethunter
+git clone https://github.com/caturpamunqkas/kernel-miatoll-nethunter
 cd kernel-miatoll-nethunter
 ./scripts/build.sh --jobs $(nproc)
 ```
 Script akan:
 1. clone kernel `lineage-21` ke `src/kernel` (shallow, ~1.4 GB)
 2. clone clang r416183b ke `src/clang` (~1.7 GB)
-3. `make vendor/xiaomi/miatoll_defconfig`
-4. merge `nethunter.fragment` + `hid-ducky.fragment`
-5. `make olddefconfig`
-6. **abort kalau ada simbol config yang hilang** (deteksi dini deps salah)
-7. build `Image.gz`
+3. **apply `patches/4.14/*.patch`** lewat `apply-patches.sh`, lalu verifikasi artefak
+4. commit hasil patch ke tree (`setlocalversion` harus lihat tree bersih)
+5. `make vendor/xiaomi/miatoll_defconfig`
+6. merge `nethunter` + `hid-ducky` + `wireless` + `sdr` + `can` + `nfs`
+7. `make olddefconfig`
+8. **abort kalau ada simbol config yang hilang** (deteksi dini deps salah)
+9. build `Image.gz`
+10. **abort kalau `kernelrelease` berakhiran `-dirty`** (vermagic rusak)
 
 Hasil: `out/arch/arm64/boot/Image.gz`
+
+### 5.1b Build tanpa driver WLAN
+```bash
+./scripts/build.sh --no-wifi --jobs $(nproc)
+```
+Melewati `configs/wireless.fragment` dan mengeluarkan blok WiFi dari gate simbol.
+Hasilnya `# CONFIG_MAC80211 is not set` seperti defconfig vendor: tidak ada driver WiFi
+USB, tidak ada monitor mode/injection. Gadget, serial, BT, SDR, CAN, NFS tetap aktif.
+Ukuran `Image.gz` turun sekitar 2,5 MB dibanding build penuh.
 
 ### 5.2 Host RAM kecil (2–4 GB)
 ```bash
@@ -221,6 +239,7 @@ Hasil: `out/arch/arm64/boot/Image.gz`
   --out /path/ke/out \
   --jobs 8
 ```
+Bisa juga lewat environment: `SRC=... OUT=... CLANG_DIR=... JOBS=8 ./scripts/build.sh`.
 
 ### 5.4 Manual (kalau tidak pakai script)
 ```bash
@@ -230,9 +249,13 @@ MAKE="make O=out ARCH=arm64 CC=clang LD=ld.lld AR=llvm-ar NM=llvm-nm \
       OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump STRIP=llvm-strip \
       CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu-"
 
+# patch dulu — Kconfig entry driver baru dibuat oleh patch
+SRC=/path/ke/kernel ./scripts/apply-patches.sh
+
 $MAKE vendor/xiaomi/miatoll_defconfig
-./scripts/kconfig/merge_config.sh -m -O out out/.config ../configs/nethunter.fragment
-./scripts/kconfig/merge_config.sh -m -O out out/.config ../configs/hid-ducky.fragment
+for f in nethunter hid-ducky wireless sdr can nfs; do
+  ./scripts/kconfig/merge_config.sh -m -O out out/.config ../configs/$f.fragment
+done
 $MAKE olddefconfig
 $MAKE -j$(nproc) Image.gz
 ```
@@ -244,7 +267,16 @@ $MAKE -j$(nproc) Image.gz
 | `KERNEL_BRANCH` | `lineage-21` |
 | `CLANG_REPO` | `.../android_prebuilts_clang_kernel_linux-x86_clang-r416183b` |
 | `CLANG_BRANCH` | `lineage-20.0` |
+| `SRC` | `src/kernel` |
+| `OUT` | `out` |
+| `CLANG_DIR` | `src/clang` |
 | `JOBS` | `nproc` |
+
+### 5.6 Build di host dengan `/tmp` kecil
+Kalau `/tmp` adalah tmpfs (umum di distro modern), build di `/tmp` akan mati dengan
+`IO failure on output stream: No space left on device` di tengah kompilasi. Taruh
+`src/` dan `out/` di disk nyata, mis. `SRC=~/k/linux OUT=~/k/out ./scripts/build.sh`.
+Cek dulu: `df -h /tmp`.
 
 ---
 
@@ -252,7 +284,8 @@ $MAKE -j$(nproc) Image.gz
 
 1. Push repo ini ke GitHub.
 2. Tab **Actions** → workflow **build-kernel** → **Run workflow**.
-3. Tunggu ~25–40 menit (runner `ubuntu-24.04`, 4 core).
+3. Tunggu ~40–70 menit. Runner `ubuntu-24.04`, 4 core, dan patch set + dua driver
+   out-of-tree (rtl8812au 605 file, rtw88) menambah waktu dibanding build lama.
 4. Download artifact **nethunter-miatoll-kernel**, isinya:
    - `nethunter-miatoll-<tanggal>-<run>.zip` — siap flash
    - `Image.gz`
@@ -260,6 +293,15 @@ $MAKE -j$(nproc) Image.gz
 
 Workflow ini build **tanpa** `--lite`, jadi LTO + CFI nyala (lebih aman, tapi lebih lambat).
 Kalau runner OOM, tambahkan `--lite` di step `Build kernel`.
+
+Catatan yang sudah tertangani di workflow:
+- Langkah **Free disk** menghapus `.dotnet`, `android`, `ghc`, `CodeQL` sebelum checkout;
+  runner standar tidak cukup untuk tree + clang + output LTO.
+- Cache `src/kernel` + `src/clang` diperlakukan sebagai **pristine**: ada langkah
+  `git checkout -- . && git clean -fdq` + hapus marker patch sebelum build, jadi patch
+  tidak pernah teraplikasi dua kali.
+- `--no-wifi` belum diekspos sebagai input workflow; kalau perlu, tambahkan
+  `workflow_dispatch.inputs` dan teruskan ke step build.
 
 ---
 
@@ -293,12 +335,17 @@ fastboot reboot
 ## 8. Verifikasi setelah boot
 
 ```bash
-# versi kernel — harus 4.14.336-g<hash> dengan tanggal build baru
+# versi kernel — harus 4.14.336-NetHunter-g<hash> dengan tanggal build baru
 uname -a
+# contoh: Linux localhost 4.14.336-NetHunter-g92b436e25a30 #4 SMP PREEMPT ... aarch64
 
 # config yang ditanam di kernel
 zcat /proc/config.gz | grep -E \
   "USB_SERIAL=|BT_HCIBTUSB=|USB_CONFIGFS_ACM=|USB_F_HID=|UHID=|HIDRAW=|BT_HIDP=|BT_DEBUGFS="
+
+# fitur baru: WiFi + injection + SDR + CAN + NFS
+zcat /proc/config.gz | grep -E \
+  "MAC80211=|ATH9K_HTC=|88XXAU=|RTW88=|MT7601U=|CAN=|NFSD_V4=|USB_AIRSPY=|DVB_USB_RTL28XXU="
 
 # gadget controller
 ls /sys/class/udc
@@ -308,10 +355,20 @@ ls -l /dev/hidg0 /dev/uhid 2>/dev/null
 
 # driver ter-load
 dmesg | grep -iE "gadget|hidg|uhid|ftdi|cp210|ch341|pl2303|btusb|bluetooth"
+
+# wifi (kalau ada adapter USB terpasang)
+iw dev; iw list | grep -A8 "Supported interface modes"
 ```
 
 Semua harus muncul. Kalau `/dev/hidg0` belum ada, berarti gadget configfs belum dikonfigurasi
 (bukan masalah kernel) — lihat bagian 9.
+
+Kalau adapter WiFi USB terpasang tapi tidak muncul di `iw dev`, cek firmware dulu:
+
+```bash
+dmesg | grep -iE "firmware|failed to load"
+ls /vendor/firmware | head
+```
 
 ---
 
@@ -463,14 +520,26 @@ hcitool lescan
   `--lite` di mesin dengan RAM ≥8 GB atau via GitHub Actions.
 - `System.map` dan `configs/miatoll-nethunter.config` di repo adalah snapshot build terakhir,
   berguna untuk verifikasi simbol dan diff config.
+- **Vermagic dan `.ko` vendor.** Kernel ini memakai `CONFIG_LOCALVERSION="-NetHunter"`, jadi
+  vermagic-nya `4.14.336-NetHunter-...`. Semua driver yang diaktifkan `=y` (built-in),
+  sehingga tidak ada `.ko` yang perlu load. Modul vendor di `/vendor/lib/modules`
+  (kamera, audio, fingerprint, dsb.) tidak akan cocok — kalau salah satunya dibutuhkan,
+  hapus `CONFIG_LOCALVERSION` dari `configs/nethunter.fragment` dan build ulang.
+- **Firmware tidak ikut di kernel.** `ath9k_htc`, `carl9170`, `ath6kl`, `rtlwifi`,
+  `rtw88`, `mt7601u`, `rtl8812au`, dan RTL-SDR semuanya butuh blob di
+  `/vendor/firmware` (atau `/lib/firmware`). Tanpa blob, driver probe tapi interface
+  tidak pernah muncul. Ini di luar cakupan repo.
+- **Urutan patch tidak boleh diubah.** `rtl88xxau` harus sebelum `rtw88` (hunk Kconfig
+  berjangkar pada baris yang dibuat `rtl88xxau`), dan `fix-rtw88-*` harus setelah
+  `rtw88`. `apply-patches.sh` sudah memegang urutan ini.
 
 ---
 
 ## 12. Checklist rilis
 
-- [ ] `./scripts/build.sh` selesai tanpa `MISSING:`
+- [ ] `./scripts/build.sh` selesai tanpa `MISSING:` dan tanpa `-dirty`
 - [ ] `./scripts/apply-patches.sh` cetak `OK: patch set applied and verified`
-- [ ] `uname -a` di device menampilkan versi kernel baru
+- [ ] `uname -a` menampilkan `4.14.336-NetHunter-g<hash>`
 - [ ] `zcat /proc/config.gz | grep -E "USB_F_HID|UHID|HIDRAW|BT_HIDP|BT_DEBUGFS"` semua `=y`
 - [ ] `zcat /proc/config.gz | grep -E "MAC80211=|ATH9K_HTC=|88XXAU=|RTW88=|CAN=|NFSD_V4="` semua `=y`
 - [ ] `/dev/hidg0` muncul setelah configfs setup
@@ -479,7 +548,20 @@ hcitool lescan
 - [ ] BT: `hciconfig -a` melihat adapter
 - [ ] WiFi USB: `iw dev` melihat adapter, `iw dev <if> set type monitor` berhasil
 - [ ] injection: `aireplay-ng --test <if>` melaporkan `Injection is working!`
+- [ ] injection WiFi internal: `aireplay-ng --test wlan0` (qcacld, belum pernah diuji)
 - [ ] SDR: `rtl_test -t` (RTL-SDR) atau `hackrf_info`
 - [ ] CAN: `ip link add dev can0 type vcan && ip link set can0 up`, `candump can0`
 - [ ] NFS: `mount -t nfs <host>:/path /mnt`
 - [ ] backup `boot.img` tersimpan
+
+---
+
+## 13. Riwayat perubahan
+
+| Commit | Isi |
+|---|---|
+| `e4915d5` | Kernel NetHunter awal: fragment USB serial/gadget/BT, tanpa patch source |
+| `becfab8` | Patch set Kali 4.14 + fragment `wireless`/`sdr`/`can`/`nfs` + CI Actions |
+| `972fb26` | Perbaikan `-dirty` vermagic, dependency `SERIAL_DEV_BUS`, simbol gate CAN, cache CI pristine |
+| `abcac09` | Flag `--no-wifi` untuk build tanpa driver WLAN |
+| `61f6410` | `CONFIG_LOCALVERSION="-NetHunter"` + `CONFIG_DEFAULT_HOSTNAME="kali"` |
