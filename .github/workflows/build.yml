@@ -45,7 +45,10 @@ jobs:
           fi
 
       - name: Build kernel
-        run: KBUILD_NOCMDDEP=1 ./scripts/build.sh --jobs "$(nproc)"
+        run: |
+          ln -sfn "$GITHUB_WORKSPACE" /tmp/kws
+          cd /tmp/kws
+          KBUILD_NOCMDDEP=1 ./scripts/build.sh --jobs "$(nproc)"
 
       - name: Package AnyKernel3
         run: |
