@@ -11,6 +11,13 @@
 #
 # Note: CONFIG_USB_RAW_GADGET dropped — not present in this 4.14 tree.
 
+# ---- Identitas build ----
+# Tampil di uname -a: 4.14.336-NetHunter-g<hash>
+# Catatan: ini ikut mengubah vermagic, jadi .ko vendor di /vendor/lib/modules
+# tidak lagi cocok. Semua fitur di kernel ini =y, jadi tidak ada yang butuh .ko.
+CONFIG_LOCALVERSION="-NetHunter"
+CONFIG_DEFAULT_HOSTNAME="kali"
+
 # ---- USB gadget functions: phone -> host (armor / serial / HID) ----
 CONFIG_USB_CONFIGFS_ACM=y
 CONFIG_USB_CONFIGFS_SERIAL=y

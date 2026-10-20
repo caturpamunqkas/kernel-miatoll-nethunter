@@ -12,6 +12,19 @@ nol adapter WiFi USB bisa hidup, dan injection butuh patch mac80211. Detail:
 Build terverifikasi: `Linux version 4.14.336-g0c870bf38789 #3 SMP PREEMPT`,
 clang 12.0.5 (r416183b) + LLD 12.0.5.
 
+Build sekarang memperkenalkan dirinya sebagai NetHunter lewat `CONFIG_LOCALVERSION`:
+
+```
+$ uname -a
+Linux localhost 4.14.336-NetHunter-g92b436e25a30 #1 SMP PREEMPT ... aarch64
+```
+
+Konsekuensi yang perlu diketahui: `CONFIG_LOCALVERSION` ikut masuk vermagic, jadi
+`.ko` vendor di `/vendor/lib/modules` **tidak** akan cocok dengan kernel ini
+(`vermagic ... should be 4.14.336-NetHunter-...`). Semua fitur di sini dibangun
+built-in (`=y`), jadi tidak ada modul yang dibutuhkan. Kalau suatu saat butuh `.ko`
+vendor, hapus `CONFIG_LOCALVERSION` dari `configs/nethunter.fragment`.
+
 ---
 
 ## 1. Status fitur
