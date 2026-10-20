@@ -1,0 +1,5 @@
+# Build-only tweaks for low-RAM hosts (2 core / 2GB). Not functional.
+# CFI needs LTO; both are hardening only, no effect on drivers below.
+# CONFIG_LTO_CLANG is not set
+# CONFIG_CFI_CLANG is not set
+# CONFIG_DEBUG_INFO is not set

@@ -1,0 +1,47 @@
+# HID / Rubber Ducky support — miatoll (curtana / joyeuse / excalibur / gram)
+# Base: LineageOS 21 kernel (android_kernel_xiaomi_sm6250, 4.14.336)
+#
+# Rubber Ducky = phone presents itself as USB HID keyboard to the target host.
+# Path: /dev/hidg0 via configfs HID gadget (already enabled by nethunter.fragment).
+# BT path: phone as BT HID device via BT_HIDP + uhid (userspace HID).
+#
+# Merge AFTER nethunter.fragment.
+
+# ---- HID core: userspace HID injection ----
+CONFIG_HID=y
+CONFIG_HID_GENERIC=y
+CONFIG_HIDRAW=y
+CONFIG_UHID=y
+CONFIG_INPUT_UINPUT=y
+CONFIG_INPUT_EVDEV=y
+
+# ---- USB HID host (read keyboards/mice from OTG) ----
+CONFIG_USB_HID=y
+CONFIG_USB_HIDDEV=y
+CONFIG_HID_APPLE=y
+CONFIG_HID_CHERRY=y
+CONFIG_HID_LOGITECH=y
+CONFIG_HID_MICROSOFT=y
+
+# ---- USB gadget HID (the ducky itself: /dev/hidg0) ----
+CONFIG_USB_GADGET=y
+CONFIG_USB_CONFIGFS=y
+CONFIG_USB_CONFIGFS_F_HID=y
+CONFIG_USB_F_HID=y
+CONFIG_USB_LIBCOMPOSITE=y
+CONFIG_USB_CONFIGFS_ACM=y
+CONFIG_USB_CONFIGFS_SERIAL=y
+
+# ---- Bluetooth HID + tooling ----
+CONFIG_BT=y
+CONFIG_BT_HIDP=y
+CONFIG_BT_HCIVHCI=y
+CONFIG_BT_LE=y
+CONFIG_BT_RFCOMM=y
+CONFIG_BT_RFCOMM_TTY=y
+CONFIG_BT_BNEP=y
+CONFIG_DEBUG_FS=y
+CONFIG_BT_DEBUGFS=y
+CONFIG_BT_HCIBTUSB=y
+CONFIG_BT_HCIUART=y
+CONFIG_BT_HCIUART_H4=y

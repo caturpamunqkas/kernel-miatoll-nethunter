@@ -1,0 +1,51 @@
+# Kali NetHunter kernel config fragment — miatoll (curtana / joyeuse / excalibur / gram)
+# Base: LineageOS android_kernel_xiaomi_sm6250, branch lineage-21
+#       defconfig vendor/xiaomi/miatoll_defconfig
+#
+# Scope: USB serial host support, USB gadget (phone acts as serial/HID/net device),
+# Bluetooth HCI over USB dongles + user-space HCI. No kernel source patches needed.
+#
+# Usage:
+#   ./scripts/kconfig/merge_config.sh -m -O out out/.config nethunter.fragment
+#   make O=out ARCH=arm64 ... olddefconfig
+#
+# Note: CONFIG_USB_RAW_GADGET dropped — not present in this 4.14 tree.
+
+# ---- USB gadget functions: phone -> host (armor / serial / HID) ----
+CONFIG_USB_CONFIGFS_ACM=y
+CONFIG_USB_CONFIGFS_SERIAL=y
+CONFIG_USB_CONFIGFS_OBEX=y
+CONFIG_USB_CONFIGFS_ECM=y
+CONFIG_USB_CONFIGFS_RNDIS=y
+CONFIG_USB_GADGETFS=y
+CONFIG_USB_CONFIGFS_F_HID=y
+
+# ---- USB host: serial adapters (FTDI / CP210x / CH341 / PL2303 / ACM) ----
+CONFIG_USB_SERIAL=y
+CONFIG_USB_SERIAL_CONSOLE=y
+CONFIG_USB_SERIAL_GENERIC=y
+CONFIG_USB_SERIAL_SIMPLE=y
+CONFIG_USB_SERIAL_FTDI_SIO=y
+CONFIG_USB_SERIAL_CP210X=y
+CONFIG_USB_SERIAL_CH341=y
+CONFIG_USB_SERIAL_PL2303=y
+CONFIG_USB_SERIAL_OPTION=y
+CONFIG_USB_SERIAL_WWAN=y
+CONFIG_USB_SERIAL_QUALCOMM=y
+CONFIG_USB_ACM=y
+
+# ---- Bluetooth: USB dongles + raw HCI (hciattach / btmon / bettercap) ----
+CONFIG_BT_HCIBTUSB=y
+CONFIG_BT_HCIBTUSB_BCM=y
+CONFIG_BT_HCIBTUSB_RTL=y
+CONFIG_BT_HCIUART=y
+CONFIG_BT_HCIUART_H4=y
+CONFIG_BT_HCIUART_BCM=y
+CONFIG_BT_HCIUART_QCA=y
+CONFIG_BT_HCIUART_3WIRE=y
+CONFIG_BT_HCIVHCI=y
+CONFIG_BT_RFCOMM=y
+CONFIG_BT_RFCOMM_TTY=y
+CONFIG_BT_BNEP=y
+CONFIG_BT_HIDP=y
+CONFIG_BT_LE=y
