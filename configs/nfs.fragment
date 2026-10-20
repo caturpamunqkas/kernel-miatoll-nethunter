@@ -1,0 +1,11 @@
+# NFS — miatoll. Client v2/v3/v4 + server, sesuai dokumentasi NetHunter (NFS page).
+# NFS_FS depends on INET && FILE_LOCKING && MULTIUSER (semua sudah y di vendor config).
+
+CONFIG_NETWORK_FILESYSTEMS=y
+CONFIG_NFS_FS=y
+CONFIG_NFS_V2=y
+CONFIG_NFS_V3=y
+CONFIG_NFS_V4=y
+CONFIG_NFSD=y
+CONFIG_NFSD_V3=y
+CONFIG_NFSD_V4=y

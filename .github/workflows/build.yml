@@ -3,24 +3,41 @@ name: build-kernel
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    branches: [master]
 
 jobs:
   build:
     runs-on: ubuntu-24.04
-    timeout-minutes: 120
+    timeout-minutes: 180
     steps:
       - uses: actions/checkout@v4
+
+      # Runner ships ~14 GB free; kernel tree 1.4 GB + clang 1.7 GB + LTO output > 3 GB.
+      - name: Free disk
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          sudo apt-get clean
+          df -h /
 
       - name: Deps
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq bc bison flex libssl-dev libelf-dev \
+          sudo apt-get install -y -qq bc bison flex libssl-dev libelf-dev patch \
             gcc-aarch64-linux-gnu libc6-dev-arm64-cross zip unzip rsync cpio zstd lz4
 
+      # Cached tree already carries the patch marker, so apply-patches.sh is a no-op
+      # on a hit. Key includes the patch set, so a changed patch means a fresh clone.
+      - name: Cache kernel tree + clang
+        uses: actions/cache@v4
+        with:
+          path: |
+            src/kernel
+            src/clang
+          key: ksrc-${{ hashFiles('patches/4.14/*.patch') }}
+          restore-keys: ksrc-
+
       - name: Build kernel
-        run: |
-          ./scripts/build.sh --jobs "$(nproc)"
+        run: ./scripts/build.sh --jobs "$(nproc)"
 
       - name: Package AnyKernel3
         run: |

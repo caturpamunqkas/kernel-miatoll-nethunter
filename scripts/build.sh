@@ -39,6 +39,10 @@ done
 [ -x "$CLANG_DIR/bin/clang" ] || git clone --depth=1 -b "$CLANG_BRANCH" "$CLANG_REPO" "$CLANG_DIR"
 export PATH="$CLANG_DIR/bin:$PATH"
 
+# Kali NetHunter patch set (WiFi injection, rtl88xxau, rtw88, qcacld injection, ...).
+# Must run before defconfig: patches add Kconfig entries the fragments rely on.
+SRC="$SRC" "$ROOT/scripts/apply-patches.sh"
+
 MAKE_ARGS=(ARCH=arm64 CC=clang LD=ld.lld AR=llvm-ar NM=llvm-nm
            OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump STRIP=llvm-strip
            CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu-)
@@ -48,18 +52,36 @@ mkdir -p "$OUT"
 mk "$DEFCONFIG"
 
 # Fragment merge. merge_config.sh -m needs -O for the output dir.
-"$SRC/scripts/kconfig/merge_config.sh" -m -O "$OUT" "$OUT/.config" "$ROOT/configs/nethunter.fragment"
-"$SRC/scripts/kconfig/merge_config.sh" -m -O "$OUT" "$OUT/.config" "$ROOT/configs/hid-ducky.fragment"
+for f in nethunter hid-ducky wireless sdr can nfs; do
+  "$SRC/scripts/kconfig/merge_config.sh" -m -O "$OUT" "$OUT/.config" "$ROOT/configs/$f.fragment"
+done
 [ "$LITE" = 1 ] && "$SRC/scripts/kconfig/merge_config.sh" -m -O "$OUT" "$OUT/.config" "$ROOT/configs/build-lite.fragment"
 
 mk olddefconfig
 
 # Fail loudly if any requested symbol vanished (silent drop = wrong deps).
 missing=0
-for sym in USB_CONFIGFS_ACM USB_CONFIGFS_SERIAL USB_GADGETFS USB_CONFIGFS_F_HID \
-           USB_SERIAL USB_SERIAL_FTDI_SIO USB_SERIAL_CP210X USB_SERIAL_CH341 USB_SERIAL_PL2303 \
-           BT_HCIBTUSB BT_HCIUART BT_HCIUART_QCA BT_HCIVHCI BT_RFCOMM BT_BNEP BT_HIDP BT_LE \
-           HIDRAW UHID INPUT_UINPUT USB_HIDDEV DEBUG_FS BT_DEBUGFS; do
+for sym in \
+  USB_CONFIGFS_ACM USB_CONFIGFS_SERIAL USB_GADGETFS USB_CONFIGFS_F_HID USB_F_HID \
+  USB_CONFIGFS_NCM USB_CONFIGFS_ECM USB_CONFIGFS_ECM_SUBSET USB_CONFIGFS_EEM \
+  USB_CONFIGFS_RNDIS USB_CONFIGFS_OBEX USB_CONFIGFS_MASS_STORAGE USB_F_FS \
+  USB_SERIAL USB_SERIAL_FTDI_SIO USB_SERIAL_CP210X USB_SERIAL_CH341 USB_SERIAL_PL2303 \
+  USB_SERIAL_OPTION USB_ACM USB_RTL8150 USB_RTL8152 USB_NET_RNDIS_WLAN \
+  HIDRAW UHID INPUT_UINPUT USB_HIDDEV \
+  BT_HCIBTUSB BT_HCIBTUSB_BCM BT_HCIBTUSB_RTL BT_HCIUART BT_HCIUART_H4 \
+  BT_HCIUART_BCM BT_HCIUART_QCA BT_HCIUART_3WIRE BT_HCIVHCI BT_HCIBCM203X \
+  BT_HCIBPA10X BT_HCIBFUSB BT_RFCOMM BT_RFCOMM_TTY BT_BNEP BT_HIDP BT_LE \
+  DEBUG_FS BT_DEBUGFS \
+  CFG80211 CFG80211_WEXT MAC80211 MAC80211_MESH ATH9K_HTC CARL9170 ATH6KL ATH6KL_USB \
+  RT2X00 RT2500USB RT73USB RT2800USB RT2800USB_UNKNOWN RTL8187 RTL_CARDS RTL8192CU \
+  RTL8XXXU RTL8XXXU_UNTESTED 88XXAU RTW88_CORE RTW88_USB RTW88_8812AU RTW88_8821AU \
+  MT7601U ZD1211RW \
+  MEDIA_SDR_SUPPORT MEDIA_DIGITAL_TV_SUPPORT USB_AIRSPY USB_HACKRF USB_MSI2500 \
+  MEDIA_TUNER_MSI001 DVB_USB_V2 DVB_USB_RTL28XXU DVB_RTL2832_SDR \
+  CAN CAN_RAW CAN_BCM CAN_GW CAN_VCAN CAN_SLCAN CAN_GS_USB CAN_PEAK_USB CAN_8DEV_USB \
+  NET_SCH_CAN \
+  NFS_FS NFS_V3 NFS_V4 NFSD NFSD_V3 NFSD_V4 \
+  SYSVIPC; do
   grep -q "^CONFIG_$sym=y" "$OUT/.config" || { echo "MISSING: $sym" >&2; missing=1; }
 done
 [ "$missing" = 0 ] || { echo "config merge incomplete, aborting" >&2; exit 1; }

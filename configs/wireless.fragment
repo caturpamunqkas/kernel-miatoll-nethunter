@@ -1,0 +1,64 @@
+# WiFi — miatoll (curtana / joyeuse / excalibur / gram)
+# Base: LineageOS 21 (android_kernel_xiaomi_sm6250, 4.14.336) + patches/4.14
+#
+# Urutan penting: MAC80211 dulu. Semua driver USB di bawah `depends on USB && MAC80211`,
+# dan .config vendor tidak punya MAC80211 sama sekali (nol adapter eksternal hidup).
+#
+# Merge AFTER nethunter.fragment, BEFORE sdr/can/nfs.
+
+# ---- mac80211 stack ----
+CONFIG_CFG80211_WEXT=y
+CONFIG_MAC80211=y
+CONFIG_MAC80211_MESH=y
+CONFIG_MAC80211_LEDS=y
+CONFIG_MAC80211_DEBUGFS=y
+
+# ---- Atheros: AR9271/AR7010 (ath9k_htc), AR9170 (carl9170), AR6004 (ath6kl) ----
+CONFIG_ATH9K_HTC=y
+CONFIG_ATH9K_HTC_DEBUGFS=y
+CONFIG_CARL9170=y
+CONFIG_ATH6KL=y
+CONFIG_ATH6KL_USB=y
+
+# ---- Ralink: RT2500 / RT73 / RT2800 / RT3070 ----
+CONFIG_RT2X00=y
+CONFIG_RT2500USB=y
+CONFIG_RT73USB=y
+CONFIG_RT2800USB=y
+CONFIG_RT2800USB_RT33XX=y
+CONFIG_RT2800USB_RT35XX=y
+CONFIG_RT2800USB_RT3573=y
+CONFIG_RT2800USB_RT53XX=y
+CONFIG_RT2800USB_RT55XX=y
+CONFIG_RT2800USB_UNKNOWN=y
+
+# ---- Realtek in-tree: RTL8187, RTL8188CU/8192CU/8723AU, RTL8XXXU (8188EU/8192EU) ----
+CONFIG_RTL8187=y
+CONFIG_RTL_CARDS=y
+CONFIG_RTL8192CU=y
+CONFIG_RTL8XXXU=y
+CONFIG_RTL8XXXU_UNTESTED=y
+
+# ---- Realtek out-of-tree (patch add-rtl88xxau): RTL8811AU/8812AU/8814AU/8821AU ----
+# Alfa AWUS036ACH class. FullMAC driver, own stack (not mac80211).
+CONFIG_88XXAU=y
+
+# ---- Realtek rtw88 (patch add-rtw88): RTW88-USB ----
+# RTW88 is a menuconfig gate; without it every RTW88_* symbol is silently dropped.
+CONFIG_RTW88=y
+CONFIG_RTW88_CORE=y
+CONFIG_RTW88_USB=y
+CONFIG_RTW88_8821AU=y
+CONFIG_RTW88_8812AU=y
+CONFIG_RTW88_8814AU=y
+CONFIG_RTW88_8822BU=y
+CONFIG_RTW88_8822CU=y
+CONFIG_RTW88_8723DU=y
+CONFIG_RTW88_8821CU=y
+CONFIG_RTW88_DEBUGFS=y
+
+# ---- MediaTek MT7601U / ZyDAS / RNDIS wireless ----
+CONFIG_MT7601U=y
+CONFIG_ZD1211RW=y
+CONFIG_USB_ZD1201=y
+CONFIG_USB_NET_RNDIS_WLAN=y

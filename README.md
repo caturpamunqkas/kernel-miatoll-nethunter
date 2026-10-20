@@ -1,7 +1,13 @@
 # NetHunter kernel — Redmi Note 9 Pro (miatoll: curtana / joyeuse / excalibur / gram)
 
-Kernel LineageOS 21 (Android 14) + fragment config NetHunter. **Tanpa patch source kernel.**
-Target utama: USB gadget serial, USB gadget HID (rubber ducky), USB host serial, Bluetooth HCI.
+Kernel LineageOS 21 (Android 14) + patch set Kali NetHunter + fragment config.
+Target: USB gadget serial/HID (ducky), USB host serial, Bluetooth HCI, **WiFi USB
+eksternal + monitor mode + injection**, **WiFi internal injection**, SDR, CAN, NFS.
+
+Patch source kernel **dipakai** (`patches/4.14/`, 9 patch dari Kali kernel-builder plus
+2 perbaikan lokal). Alasannya: `CONFIG_MAC80211` tidak ada di defconfig vendor sehingga
+nol adapter WiFi USB bisa hidup, dan injection butuh patch mac80211. Detail:
+`patches/4.14/SOURCE.md`.
 
 Build terverifikasi: `Linux version 4.14.336-g0c870bf38789 #3 SMP PREEMPT`,
 clang 12.0.5 (r416183b) + LLD 12.0.5.
@@ -16,18 +22,35 @@ clang 12.0.5 (r416183b) + LLD 12.0.5.
 | USB gadget HID — rubber ducky (`/dev/hidg0`) | aktif | `USB_CONFIGFS_F_HID`, `USB_F_HID` |
 | HID raw + uhid (userspace HID, BT HID device) | aktif | `HIDRAW`, `UHID`, `INPUT_UINPUT` |
 | USB host HID (baca keyboard/mouse lewat OTG) | aktif | `USB_HID`, `USB_HIDDEV` |
-| USB gadget net (ECM + RNDIS) | aktif | `USB_CONFIGFS_ECM`, `USB_CONFIGFS_RNDIS` |
+| USB gadget net (ECM + ECM subset + NCM + EEM + RNDIS) | aktif | `USB_CONFIGFS_ECM*`, `_NCM`, `_EEM`, `_RNDIS` |
+| USB gadget mass storage (DriveDroid) | aktif | `USB_CONFIGFS_MASS_STORAGE` |
+| USB gadget audio (HP jadi sound card) | aktif | `USB_CONFIGFS_F_UAC2`, `_F_MIDI` |
 | USB host serial: FTDI / CP210x / CH341 / PL2303 / ACM / Option | aktif | `USB_SERIAL_*` |
-| Bluetooth USB dongle | aktif | `BT_HCIBTUSB` (+BCM, +RTL) |
-| BT HCI UART (H4 / BCM / QCA / 3WIRE) | aktif | `BT_HCIUART*` |
+| Bluetooth USB dongle | aktif | `BT_HCIBTUSB` (+BCM, +RTL, +UB500) |
+| BT HCI UART (H4 / BCM / QCA / 3WIRE) + dongle USB lama (BCM203x, BPA10x, BFUSB) | aktif | `BT_HCIUART*`, `BT_HCIBCM203X`, `BT_HCIBPA10X`, `BT_HCIBFUSB` |
 | BT raw HCI untuk `btmon` / `bettercap` | aktif | `BT_HCIVHCI` |
 | BT RFCOMM / BNEP / HIDP / LE | aktif | `BT_RFCOMM*`, `BT_BNEP`, `BT_HIDP`, `BT_LE` |
 | BT debugfs (`/sys/kernel/debug/bluetooth`) | aktif | `DEBUG_FS`, `BT_DEBUGFS` |
-| WiFi internal monitor mode | **tidak bisa** | qcacld-3.0 di tree ini tanpa injection |
-| WiFi USB adapter (RTL8812AU, MT7612U, dll) | **tidak ada** | driver tidak ada di tree 4.14 ini |
+| **WiFi USB: AR9271/AR7010 (ath9k_htc), AR9170 (carl9170), AR6004 (ath6kl)** | aktif | `ATH9K_HTC`, `CARL9170`, `ATH6KL_USB` |
+| **WiFi USB: RT2500 / RT73 / RT2800 / RT3070** | aktif | `RT2X00`, `RT2500USB`, `RT73USB`, `RT2800USB*` |
+| **WiFi USB: RTL8187, RTL8188CU/8192CU/8192EU/8723AU, RTL8188EUS** | aktif | `RTL8187`, `RTL8192CU`, `RTL8XXXU` (+patch) |
+| **WiFi USB: RTL8811AU/8812AU/8814AU/8821AU (Alfa AWUS036ACH)** | aktif | `88XXAU` (driver `rtl8812au` dari patch) |
+| **WiFi USB: RTW88-USB, RTL8822BU/CU, RTL8723DU** | aktif | `RTW88*` (driver `rtw88` dari patch) |
+| **WiFi USB: MT7601U, ZD1211RW** | aktif | `MT7601U`, `ZD1211RW` |
+| **Monitor mode + frame injection (mac80211)** | aktif | patch `add-wifi-injection` |
+| **Monitor mode + injection WiFi internal (qcacld-3.0)** | aktif di kernel, **belum diuji di device** | patch `add-qcacld-3.0-injection` |
+| **SDR: RTL-SDR (RTL2832U), HackRF, Airspy, Mirics** | aktif | `DVB_USB_RTL28XXU`, `USB_HACKRF`, `USB_AIRSPY`, `USB_MSI2500` |
+| **CAN / CARsenal (vcan, slcan, gs_usb, peak, kvaser, esd, ems, 8dev, mcba)** | aktif | `CAN*` |
+| **NFS client v2/v3/v4 + server** | aktif | `NFS_FS`, `NFSD*` |
+| WiFi USB: MT7610U / MT7612U (mt76) | **tidak ada** | driver tidak ada di tree 4.14, tidak ada patch resmi Kali |
 
 Semua driver di atas dibangun **built-in** (`=y`), bukan modul. Jadi tidak kena masalah
 `CONFIG_MODULE_SIG_FORCE=y` dan tidak perlu push `.ko` ke `/vendor/lib/modules`.
+
+Firmware driver WiFi/BT/SDR tetap harus ada di device (`/vendor/firmware` atau
+`/lib/firmware`): `htc_9271.fw`, `htc_7010.fw`, `carl9170-1.fw`, `mt7601u.bin`,
+`rtl_nic/rtl8xxxu*`, `dvb-usb-rtl28xxu-01.fw`, `rtl_bt/*`. Itu di luar kernel dan di luar
+repo ini.
 
 ---
 
@@ -122,13 +145,20 @@ kernel-miatoll-nethunter/
 ├── README.md                     # dokumen ini
 ├── .gitignore                    # src/, out/, *.zip
 ├── configs/
-│   ├── nethunter.fragment        # USB serial host + gadget serial/net + BT HCI
+│   ├── nethunter.fragment        # USB serial host + gadget serial/net + BT HCI + celah docs
 │   ├── hid-ducky.fragment        # HID raw, uhid, gadget HID, BT HIDP, debugfs
+│   ├── wireless.fragment         # mac80211 + semua driver WiFi USB (in-tree + patch)
+│   ├── sdr.fragment              # RTL-SDR, HackRF, Airspy, Mirics
+│   ├── can.fragment              # CAN + adapter USB (CARsenal)
+│   ├── nfs.fragment              # NFS client v2/v3/v4 + server
 │   ├── build-lite.fragment       # matikan LTO/CFI/DEBUG_INFO (host RAM kecil)
 │   ├── miatoll-nethunter.config  # .config final hasil build (referensi)
 │   └── anykernel.sh              # script AnyKernel3 (device check miatoll)
+├── patches/4.14/                 # patch set Kali + 2 perbaikan lokal, SOURCE.md, SHA256SUMS
 ├── scripts/
-│   └── build.sh                  # clone, merge fragment, olddefconfig, build
+│   ├── build.sh                  # clone, apply patch, merge fragment, olddefconfig, gate, build
+│   ├── apply-patches.sh          # urutan patch + verifikasi artefak
+│   └── check-symbols.sh          # cek tiap CONFIG_* punya Kconfig entry
 ├── .github/workflows/build.yml   # CI: build + zip AK3 + upload artifact
 └── System.map                    # simbol kernel hasil build terakhir
 ```
@@ -138,6 +168,14 @@ Hasil build tidak di-commit: `src/` (kernel + clang) dan `out/` masuk `.gitignor
 ---
 
 ## 5. Build lokal
+
+Patch set diaplikasikan otomatis oleh `scripts/build.sh` sebelum `defconfig`
+(`scripts/apply-patches.sh`). Kalau ingin memeriksa dulu tanpa build:
+
+```bash
+./scripts/check-symbols.sh configs/*.fragment   # tiap CONFIG_* punya Kconfig entry?
+SRC=src/kernel ./scripts/apply-patches.sh       # apply + verifikasi artefak
+```
 
 ### 5.1 Cepat (host RAM cukup, ≥8 GB)
 ```bash
@@ -297,6 +335,46 @@ printf '\x00\x00\x00\x00\x00\x00\x00\x00' > /dev/hidg0
 Tool siap pakai di NetHunter chroot: menu **HID Attacks** (DuckyScript runner) atau
 `hid-gadget-test`.
 
+### 9.1b WiFi USB eksternal — monitor mode + injection
+
+Colok adapter lewat OTG (butuh kabel OTG; adapter 2 antena biasanya butuh powered hub).
+
+```bash
+# driver ter-load?
+dmesg | grep -iE "ath9k_htc|carl9170|rt2800usb|rtl8xxxu|88XXAU|rtw_88xxau|rtw88|mt7601u|zd1211rw"
+ip link            # wlan1 biasanya adapter USB, wlan0 = WiFi internal
+
+# monitor mode
+ip link set wlan1 down
+iw dev wlan1 set type monitor
+ip link set wlan1 up
+iw dev wlan1 info   # type: monitor
+
+# injection (aircrack-ng suite di chroot)
+airmon-ng start wlan1
+airodump-ng wlan1mon
+aireplay-ng --test wlan1mon   # harus "Injection is working!"
+```
+
+`aireplay-ng --test` yang lolos = bukti jalur TX benar. Monitor mode saja tidak.
+
+Chipset yang didukung ada di tabel bagian 1. Untuk `88XXAU` (RTL8812AU) dan `rtw88`,
+pastikan firmware ada di `/vendor/firmware` (`rtw88/rtw8821a_fw.bin`, dst.).
+
+### 9.1c WiFi internal (qcacld-3.0) — monitor mode + injection
+
+```bash
+# butuh driver qcacld dengan CONFIG_FEATURE_FRAME_INJECTION_SUPPORT=y (dari patch)
+zcat /proc/config.gz | grep -E "QCA_CLD_WLAN|FEATURE_MONITOR_MODE"
+iw dev wlan0 set type monitor
+iw dev wlan0 info
+aireplay-ng --test wlan0
+```
+
+**Status: aktif di kernel, belum diuji di device.** Jalur TX injection internal adalah
+properti driver yang sudah dipatch, bukan properti hardware — tapi klaim "jalan" hanya
+sah setelah `--test` lolos di joyeuse.
+
 ### 9.2 USB gadget serial (HP jadi perangkat serial di PC)
 ```bash
 cd /config/usb_gadget/g1
@@ -344,6 +422,13 @@ hcitool lescan
 | Kernel flash sukses tapi bootloop | kernel tidak match ROM (beda versi Android / beda device) | rollback `boot.img`, pastikan ROM = LineageOS 21 untuk `miatoll` |
 | Boot normal tapi WiFi mati | `QCA_CLD_WLAN` built-in, `con_mode` tidak diset | cek `dmesg | grep wlan`; ini bukan regresi kernel, driver sama seperti aslinya |
 | `/dev/hidg0` tidak ada | gadget configfs belum disetup, atau `USB_CONFIGFS_F_HID` tidak aktif | cek `zcat /proc/config.gz | grep USB_F_HID`, lalu ulangi bagian 9.1 |
+| Adapter WiFi USB tidak terdeteksi (`ip link` tak ada wlan1) | `CONFIG_MAC80211` tidak aktif, atau firmware tidak ada | `zcat /proc/config.gz \| grep MAC80211` harus `=y`; cek `dmesg` untuk `Direct firmware load ... failed` lalu taruh firmware di `/vendor/firmware` |
+| `88XXAU`/`rtw88` tidak ter-load | patch tidak teraplikasi, atau `.config` di-merge sebelum patch | `grep 88XXAU out/.config`; `scripts/apply-patches.sh` harus jalan sebelum `defconfig` |
+| `patch: **** malformed patch` / `PATCH FAILED` saat build | tree sudah pernah dipatch (marker hilang) atau `KERNEL_BRANCH` bergerak | `scripts/apply-patches.sh --force` pada tree bersih; pin `KERNEL_BRANCH` ke commit |
+| `ld.lld: error: duplicate symbol` | dua driver built-in punya simbol global sama (pernah terjadi: rtw88 vs rtl8812au) | patch `fix-rtw88-symbol-collision.patch` harus teraplikasi |
+| `error: expected ')'` di `rtw88/tx.c` | `static_assert()` tidak ada di kernel < 5.1 | patch `fix-rtw88-static-assert.patch` harus teraplikasi |
+| `No space left on device` saat build | `/tmp` tmpfs, atau runner CI tanpa bebas disk | build dengan `OUT` di disk nyata (`--out`); CI punya langkah `Free disk` |
+| `aireplay-ng --test` gagal walau monitor mode jalan | jalur TX tidak ter-inject: patch `add-wifi-injection` tidak masuk | cek `grep IEEE80211_TX_CTL_INJECTED net/mac80211/tx.c` di tree |
 
 ---
 
@@ -353,9 +438,11 @@ hcitool lescan
   punya config/ramdisk berbeda dan bisa gagal boot.
 - `CONFIG_MODULE_SIG_FORCE=y` tetap aktif seperti aslinya. Semua fitur di atas `=y` (built-in),
   jadi tidak ada isu signing.
-- `CONFIG_QCA_CLD_WLAN=y` built-in. Kalau butuh `con_mode` (monitor mode qcacld), harus lewat
-  cmdline kernel, bukan `insmod`. Dan tetap tidak akan dapat injection karena driver di tree ini
-  tidak punya jalur TX monitor.
+- `CONFIG_QCA_CLD_WLAN=y` built-in. `con_mode` (monitor mode qcacld) diset lewat cmdline
+  kernel, bukan `insmod`. Sejak patch `add-qcacld-3.0-injection`, driver punya jalur TX
+  injection (`wlan_hdd_frame_inject*.c`, `CONFIG_FEATURE_FRAME_INJECTION_SUPPORT := y`)
+  dan `CONFIG_FEATURE_MONITOR_MODE_SUPPORT` dinyalakan (default `n` di tree).
+  **Belum diuji di device** — jangan klaim jalan sebelum `aireplay-ng --test` lolos.
 - **Rubber ducky = USB HID, bukan Bluetooth.** BT HID butuh pairing di sisi target; praktis tidak
   dipakai untuk ducky. Yang aktif untuk BT adalah `BT_HIDP` (HP bisa jadi HID device setelah
   pairing) + `BT_HCIVHCI` (raw HCI untuk tooling).
@@ -369,10 +456,17 @@ hcitool lescan
 ## 12. Checklist rilis
 
 - [ ] `./scripts/build.sh` selesai tanpa `MISSING:`
+- [ ] `./scripts/apply-patches.sh` cetak `OK: patch set applied and verified`
 - [ ] `uname -a` di device menampilkan versi kernel baru
 - [ ] `zcat /proc/config.gz | grep -E "USB_F_HID|UHID|HIDRAW|BT_HIDP|BT_DEBUGFS"` semua `=y`
+- [ ] `zcat /proc/config.gz | grep -E "MAC80211=|ATH9K_HTC=|88XXAU=|RTW88=|CAN=|NFSD_V4="` semua `=y`
 - [ ] `/dev/hidg0` muncul setelah configfs setup
 - [ ] ducky test: ketukan sampai di target host
 - [ ] USB serial gadget: `/dev/ttyACM0` muncul di PC
 - [ ] BT: `hciconfig -a` melihat adapter
+- [ ] WiFi USB: `iw dev` melihat adapter, `iw dev <if> set type monitor` berhasil
+- [ ] injection: `aireplay-ng --test <if>` melaporkan `Injection is working!`
+- [ ] SDR: `rtl_test -t` (RTL-SDR) atau `hackrf_info`
+- [ ] CAN: `ip link add dev can0 type vcan && ip link set can0 up`, `candump can0`
+- [ ] NFS: `mount -t nfs <host>:/path /mnt`
 - [ ] backup `boot.img` tersimpan

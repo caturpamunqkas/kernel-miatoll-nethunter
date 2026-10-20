@@ -1,0 +1,24 @@
+# CAN — miatoll, untuk CARsenal.
+# CONFIG_CAN tidak ada di .config vendor (bukan "is not set"): Kconfig entry-nya
+# tidak pernah di-source. Menyalakannya membuka seluruh subsistem.
+
+CONFIG_CAN=y
+CONFIG_CAN_RAW=y
+CONFIG_CAN_BCM=y
+CONFIG_CAN_GW=y
+CONFIG_CAN_VCAN=y
+CONFIG_CAN_SLCAN=y
+CONFIG_CAN_DEV=y
+CONFIG_CAN_CALC_BITTIMING=y
+# CAN Identifier classifier (docs CAN page, "QoS and/or fair queueing" section)
+CONFIG_NET_EMATCH=y
+CONFIG_NET_EMATCH_CANID=y
+
+# USB CAN adapters
+CONFIG_CAN_EMS_USB=y
+CONFIG_CAN_ESD_USB2=y
+CONFIG_CAN_GS_USB=y
+CONFIG_CAN_KVASER_USB=y
+CONFIG_CAN_PEAK_USB=y
+CONFIG_CAN_8DEV_USB=y
+CONFIG_CAN_MCBA_USB=y

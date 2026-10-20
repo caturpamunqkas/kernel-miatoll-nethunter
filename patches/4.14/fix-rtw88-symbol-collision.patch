@@ -1,0 +1,66 @@
+--- a/drivers/net/wireless/realtek/rtw88/sec.c
++++ b/drivers/net/wireless/realtek/rtw88/sec.c
+@@ -19,7 +19,7 @@
+ 	return find_first_zero_bit(sec->cam_map, RTW_MAX_SEC_CAM_NUM);
+ }
+ 
+-void rtw_sec_write_cam(struct rtw_dev *rtwdev,
++void rtw88_sec_write_cam(struct rtw_dev *rtwdev,
+ 		       struct rtw_sec_desc *sec,
+ 		       struct ieee80211_sta *sta,
+ 		       struct ieee80211_key_conf *key,
+--- a/drivers/net/wireless/realtek/rtw88/sec.h
++++ b/drivers/net/wireless/realtek/rtw88/sec.h
+@@ -26,7 +26,7 @@
+ #define RTW_SEC_ENGINE_EN		BIT(9)
+ 
+ int rtw_sec_get_free_cam(struct rtw_sec_desc *sec);
+-void rtw_sec_write_cam(struct rtw_dev *rtwdev,
++void rtw88_sec_write_cam(struct rtw_dev *rtwdev,
+ 		       struct rtw_sec_desc *sec,
+ 		       struct ieee80211_sta *sta,
+ 		       struct ieee80211_key_conf *key,
+--- a/drivers/net/wireless/realtek/rtw88/regd.c
++++ b/drivers/net/wireless/realtek/rtw88/regd.c
+@@ -333,7 +333,7 @@
+ void rtw_regd_notifier(struct wiphy *wiphy, struct regulatory_request *request);
+ 
+ /* call this before ieee80211_register_hw() */
+-int rtw_regd_init(struct rtw_dev *rtwdev)
++int rtw88_regd_init(struct rtw_dev *rtwdev)
+ {
+ 	struct wiphy *wiphy = rtwdev->hw->wiphy;
+ 	const struct rtw_regulatory *chip_reg;
+--- a/drivers/net/wireless/realtek/rtw88/regd.h
++++ b/drivers/net/wireless/realtek/rtw88/regd.h
+@@ -64,7 +64,7 @@
+ 	COUNTRY_CODE_MAX
+ };
+ 
+-int rtw_regd_init(struct rtw_dev *rtwdev);
++int rtw88_regd_init(struct rtw_dev *rtwdev);
+ int rtw_regd_hint(struct rtw_dev *rtwdev);
+ u8 rtw_regd_get(struct rtw_dev *rtwdev);
+ bool rtw_regd_has_alt(u8 regd, u8 *regd_alt);
+--- a/drivers/net/wireless/realtek/rtw88/main.c
++++ b/drivers/net/wireless/realtek/rtw88/main.c
+@@ -2404,7 +2404,7 @@
+ 	hw->wiphy->sar_capa = &rtw_sar_capa;
+ #endif
+ 
+-	ret = rtw_regd_init(rtwdev);
++	ret = rtw88_regd_init(rtwdev);
+ 	if (ret) {
+ 		rtw_err(rtwdev, "failed to init regd\n");
+ 		return ret;
+--- a/drivers/net/wireless/realtek/rtw88/mac80211.c
++++ b/drivers/net/wireless/realtek/rtw88/mac80211.c
+@@ -641,7 +641,7 @@
+ 		/* need sw generated IV */
+ 		key->flags |= IEEE80211_KEY_FLAG_GENERATE_IV;
+ 		key->hw_key_idx = hw_key_idx;
+-		rtw_sec_write_cam(rtwdev, sec, sta, key,
++		rtw88_sec_write_cam(rtwdev, sec, sta, key,
+ 				  hw_key_type, hw_key_idx);
+ 		break;
+ 	case DISABLE_KEY:

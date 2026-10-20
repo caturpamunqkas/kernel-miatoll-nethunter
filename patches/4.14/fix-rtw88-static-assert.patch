@@ -1,0 +1,18 @@
+diff --git a/include/linux/build_bug.h b/include/linux/build_bug.h
+index 969904a01..ef773c587 100644
+--- a/include/linux/build_bug.h
++++ b/include/linux/build_bug.h
+@@ -87,4 +87,13 @@
+ #define _Static_assert(expr, ...)
+ #endif
+ 
++/*
++ * C11 static_assert(): the kernel only defines it from 5.1 on. Backport for
++ * out-of-tree drivers imported into older trees (rtw88 on 4.14). _Static_assert
++ * works at file scope, which is where these assertions live.
++ */
++#ifndef static_assert
++#define static_assert(expr) _Static_assert(expr, #expr)
++#endif
++
+ #endif	/* _LINUX_BUILD_BUG_H */
