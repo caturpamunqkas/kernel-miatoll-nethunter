@@ -88,6 +88,19 @@ jobs:
           path: /tmp/build.log
           if-no-files-found: ignore
 
+      # Artifact downloads and run logs both need repo admin rights, but job
+      # annotations are readable by anyone through the check-runs API. Surface
+      # the failing lines as annotations so the cause is visible from outside.
+      - name: Annotate failure
+        if: failure()
+        run: |
+          [ -f /tmp/build.log ] || exit 0
+          grep -nE "error:|Error [0-9]|PATCH FAILED|MISSING:|Killed|No space left|fatal:|undefined reference" \
+            /tmp/build.log | tail -n 20 | while IFS= read -r line; do
+              echo "::error title=build::$line"
+            done
+          echo "::error title=last-20-lines::$(tail -n 20 /tmp/build.log | tr '\n' '|')"
+
       - name: Package AnyKernel3
         run: |
           curl -sL -o ak3.tar.gz https://github.com/osm0sis/AnyKernel3/archive/refs/heads/master.tar.gz
