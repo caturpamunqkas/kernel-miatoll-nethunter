@@ -2,6 +2,11 @@ name: build-kernel
 
 on:
   workflow_dispatch:
+    inputs:
+      lite:
+        description: "Drop LTO/CFI/DEBUG_INFO (use if the LTO link runs out of memory)"
+        type: boolean
+        default: false
   push:
     branches: [master]
 
@@ -25,30 +30,51 @@ jobs:
           sudo apt-get install -y -qq bc bison flex libssl-dev libelf-dev patch \
             gcc-aarch64-linux-gnu libc6-dev-arm64-cross zip unzip rsync cpio zstd lz4
 
-      # Cache the PRISTINE tree and the toolchain, not the patched one: a cached
-      # patched tree would make apply-patches.sh re-apply on top of itself.
-      - name: Cache pristine kernel tree + clang
+      # Fixed key, not per-run: the tree is reset to upstream below, so a cached
+      # patched tree is harmless and the clone is skipped on every run.
+      - name: Cache kernel tree + clang
         uses: actions/cache@v4
         with:
           path: |
             src/kernel
             src/clang
-          key: ksrc-${{ github.run_id }}-${{ github.run_attempt }}
-          restore-keys: ksrc-
+          key: ksrc-lineage-21-v1
+          restore-keys: ksrc-lineage-21-
 
+      # apply-patches.sh COMMITS the patched tree, so `git checkout -- .` is a
+      # no-op: HEAD already contains the patches and the working tree is clean.
+      # The next apply then hits "Reversed (or previously applied) patch
+      # detected" and exits 1. Reset to the upstream branch instead.
       - name: Restore tree to pristine
         run: |
           if [ -d src/kernel/.git ]; then
-            git -C src/kernel checkout -- . || true
-            git -C src/kernel clean -fdq || true
+            git -C src/kernel fetch --depth=1 origin lineage-21 || true
+            git -C src/kernel reset --hard origin/lineage-21
+            git -C src/kernel clean -fdq
             rm -f src/kernel/.nethunter-patches-applied
+          fi
+          # Fail here, not 6 minutes into the build, if the reset did not work.
+          if [ -f src/kernel/net/mac80211/tx.c ] &&
+             grep -q MONITOR_FLAG_COOK_FRAMES src/kernel/net/mac80211/tx.c; then
+            echo "kernel tree still carries the NetHunter patches after reset" >&2
+            exit 1
           fi
 
       - name: Build kernel
         run: |
+          free -g
+          # LTO links all ~4.5k objects in one lld invocation; the runner has 16 GB.
+          # Observed peak is under that, but swap keeps a spike from OOM-killing it.
+          sudo fallocate -l 8G /swapfile && sudo chmod 600 /swapfile
+          sudo mkswap /swapfile && sudo swapon /swapfile
+          free -g
+          # Short workspace path: KBUILD_NOCMDDEP is not enough on its own, the
+          # absolute paths in the recorded command lines are the other half.
           ln -sfn "$GITHUB_WORKSPACE" /tmp/kws
           cd /tmp/kws
-          KBUILD_NOCMDDEP=1 ./scripts/build.sh --jobs "$(nproc)"
+          ARGS="--jobs $(nproc)"
+          [ "${{ inputs.lite }}" = "true" ] && ARGS="$ARGS --lite"
+          KBUILD_NOCMDDEP=1 ./scripts/build.sh $ARGS
 
       - name: Package AnyKernel3
         run: |
