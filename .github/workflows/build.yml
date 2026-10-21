@@ -74,7 +74,19 @@ jobs:
           cd /tmp/kws
           ARGS="--jobs $(nproc)"
           [ "${{ inputs.lite }}" = "true" ] && ARGS="$ARGS --lite"
-          KBUILD_NOCMDDEP=1 ./scripts/build.sh $ARGS
+          # tee so the log survives a failure and can be uploaded below.
+          set -o pipefail
+          KBUILD_NOCMDDEP=1 ./scripts/build.sh $ARGS 2>&1 | tee /tmp/build.log
+
+      # Runs even when the build failed, so the failing compiler output is
+      # retrievable without admin access to the run logs.
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: /tmp/build.log
+          if-no-files-found: ignore
 
       - name: Package AnyKernel3
         run: |
